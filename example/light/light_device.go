@@ -42,3 +42,7 @@ var (
 		},
 	}
 )
+
+func main() {
+	server.Start(lightDevice)
+}
