@@ -975,8 +975,8 @@ func (srv *Server) Init() (err error) {
 	srv.rootDeviceUUID = makeDeviceUuid(srv.FriendlyName)
 	srv.rootDescXML, err = xml.MarshalIndent(
 		upnp.DeviceDesc{
-			NSDLNA:      "urn:schemas-dlna-org:device-1-0",
-			NSSEC:       "http://www.sec.co.kr/dlna",
+			// NSDLNA:      "urn:schemas-dlna-org:device-1-0",
+			// NSSEC:       "http://www.sec.co.kr/dlna",
 			SpecVersion: upnp.SpecVersion{Major: 1, Minor: 0},
 			Device: upnp.Device{
 				DeviceType:   rootDeviceType,
