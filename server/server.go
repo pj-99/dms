@@ -74,6 +74,9 @@ type UpnpDevice struct{
 	DeviceIcons []dms.Icon
 	FriendlyName string
 	Manufacturer string
+
+	Devices []string
+	Services []string
 }
 
 
@@ -100,8 +103,6 @@ type UpnpServer struct {
 	DeviceDesc *upnp.DeviceDesc
 
 	rootDescPath  string
-	ssdpDevices []string
-	ssdpServices []string
 
 	UpnpDevice *UpnpDevice
 }
@@ -414,8 +415,8 @@ func (me *UpnpServer) ssdpInterface(if_ net.Interface) {
 	s := ssdp.Server{
 		Interface: if_,
 		// Devices:   devices(),
-		Devices:   me.ssdpDevices,
-		Services:  me.ssdpServices,
+		Devices:   me.UpnpDevice.Devices,
+		Services:  me.UpnpDevice.Services,
 		Location: func(ip net.IP) string {
 			return me.location(ip)
 		},

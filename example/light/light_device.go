@@ -34,5 +34,11 @@ var (
 		RootDeviceUUID:      server.MakeDeviceUuid(friendlyName),
 		ServiceList:         services,
 		DeviceIcons:         []dms.Icon{},
+		Devices:  []string{
+			"urn:schemas-upnp-org:service:BinaryLight:1",
+		},
+		Services: []string{
+			"urn:schemas-upnp-org:service:SwitchPower:1",
+		},
 	}
 )
