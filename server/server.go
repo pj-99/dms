@@ -134,7 +134,6 @@ func Start(d *UpnpDevice) error {
 		flag.Usage()
 		return fmt.Errorf("%s: %s\n", "unexpected positional arguments", flag.Args())
 	}
-	fmt.Println("Starting UPnP server")
 
 	logger := log.Default.WithNames("main")
 
@@ -220,7 +219,6 @@ func resizeImage(imageData image.Image, size uint) []byte {
 
 
 func readIcon(path string, size uint) []byte {
-	fmt.Println("path: ", path)
 	r, err := getIconReader(path)
 	if err != nil {
 		panic(err)
@@ -243,7 +241,6 @@ func getIconReader(path string) (io.ReadCloser, error) {
 
 
 func (s *UpnpServer) InitDevice() {
-	fmt.Println("Init Device")
 	// Init SCPD
 	for _, s := range s.UpnpDevice.ServiceList {
 		lastInd := strings.LastIndex(s.ServiceId, ":")
@@ -257,7 +254,6 @@ func (s *UpnpServer) InitDevice() {
 func (srv *UpnpServer) Init() (err error) {
 	srv.InitDevice()
 
-	fmt.Println("Init UPnP server")
 	srv.eventingLogger = srv.Logger.WithNames("eventing")
 	srv.eventingLogger.Levelf(log.Debug, "hello %v", "world")
 
@@ -269,7 +265,6 @@ func (srv *UpnpServer) Init() (err error) {
 			return
 		}
 	}
-	fmt.Println("Init UPnP server Interaces")
 	if srv.Interfaces == nil {
 		ifs, err := net.Interfaces()
 		if err != nil {
