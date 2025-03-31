@@ -31,8 +31,10 @@ import (
 	"github.com/nfnt/resize"
 )
 
-const serverVersion = "1"
-
+const (
+	serverVersion = "1"
+	serviceControlURL           = "/ctl"
+)
 
 // An interface with these flags should be valid for SSDP.
 const ssdpInterfaceFlags = net.FlagUp | net.FlagMulticast
@@ -58,11 +60,9 @@ var config = &upnpConfig{
 	Path:         "",
 	IfName:       "",
 	Http:         ":1338",
-	FriendlyName: "",
 
 	DeviceIcon:   "",
 	LogHeaders:   false,
-	
 }
 
 // The input device
@@ -72,23 +72,21 @@ type UpnpDevice struct{
 	RootDeviceModelName string
 	RootDeviceUUID string
 	DeviceIcons []dms.Icon
+	FriendlyName string
+	Manufacturer string
 }
 
 
 type UpnpServer struct {
 	HTTPConn               net.Listener
-	FriendlyName           string
 	Interfaces             []net.Interface
 	httpServeMux           *http.ServeMux
 	RootObjectPath         string
 	rootDescXML            []byte
 	closed                 chan struct{}
 	ssdpStopped            chan struct{}
-	// The service SOAP handler keyed by service URN.
-	services   map[string]upnp.UPnPService
 
 	LogHeaders bool
-	Icons   []dms.Icon
 	// Stall event subscription requests until they drop. A workaround for
 	// some bad clients.
 	StallEventSubscribe bool
@@ -112,7 +110,6 @@ type upnpConfig struct {
 	Path                string
 	IfName              string
 	Http                string
-	FriendlyName        string
 	DeviceIcon          string
 	LogHeaders          bool
 	StallEventSubscribe bool
@@ -126,7 +123,6 @@ func Start(d *UpnpDevice) error {
 	path := flag.String("path", config.Path, "browse root path")
 	ifName := flag.String("ifname", config.IfName, "specific SSDP network interface")
 	http := flag.String("http", config.Http, "http server port")
-	friendlyName := flag.String("friendlyName", config.FriendlyName, "server friendly name")
 	logHeaders := flag.Bool("logHeaders", config.LogHeaders, "log HTTP headers")
 	allowedIps := flag.String("allowedIps", "", "allowed ip of clients, separated by comma")
 	flag.BoolVar(&config.StallEventSubscribe, "stallEventSubscribe", false, "workaround for some bad event subscribers")
@@ -145,7 +141,6 @@ func Start(d *UpnpDevice) error {
 	config.Path, _ = filepath.Abs(*path)
 	config.IfName = *ifName
 	config.Http = *http
-	config.FriendlyName = *friendlyName
 	config.LogHeaders = *logHeaders
 	config.AllowedIpNets = makeIpNets(*allowedIps)
 
@@ -185,13 +180,11 @@ func Start(d *UpnpDevice) error {
 			}
 			return conn
 		}(),
-		FriendlyName:   config.FriendlyName,
 		RootObjectPath: filepath.Clean(config.Path),
 		LogHeaders: config.LogHeaders,
 		StallEventSubscribe: config.StallEventSubscribe,
 		NotifyInterval:      config.NotifyInterval,
 		AllowedIpNets:       config.AllowedIpNets,
-		Icons: config.DeviceIcons,
 		rootDescPath: "/rootDesc.xml",
 	}
 	if err := upnpServer.Init(); err != nil {
@@ -256,6 +249,8 @@ func (s *UpnpServer) InitDevice() {
 		p := path.Join("/scpd", s.ServiceId[lastInd+1:])
 		s.SCPDURL = p + ".xml"
 	}
+
+	
 }
 
 func (srv *UpnpServer) Init() (err error) {
@@ -266,9 +261,6 @@ func (srv *UpnpServer) Init() (err error) {
 	srv.eventingLogger.Levelf(log.Debug, "hello %v", "world")
 
 	srv.closed = make(chan struct{})
-	if srv.FriendlyName == "" {
-		srv.FriendlyName = "default friendly name"
-	}
 	if srv.HTTPConn == nil {
 		srv.HTTPConn, err = net.Listen("tcp", "")
 		if err != nil {
@@ -301,8 +293,8 @@ func (srv *UpnpServer) Init() (err error) {
 			Device: upnp.Device{
 				DeviceType: srv.UpnpDevice.RootDeviceType,
 				// FriendlyName: srv.FriendlyName,
-				FriendlyName: "My Testing mepu",
-				Manufacturer: "Matt Joiner <anacrolix@gmail.com>",
+				FriendlyName: srv.UpnpDevice.FriendlyName,
+				Manufacturer: srv.UpnpDevice.Manufacturer,
 				ModelName:    srv.UpnpDevice.RootDeviceModelName,
 				UDN:          srv.UpnpDevice.RootDeviceUUID,
 				VendorXML:    ``,
@@ -313,7 +305,7 @@ func (srv *UpnpServer) Init() (err error) {
 					return
 				}(),
 				IconList: func() (ret []upnp.Icon) {
-					for i, di := range srv.Icons {
+					for i, di := range srv.UpnpDevice.DeviceIcons {
 						ret = append(ret, upnp.Icon{
 							Height:   di.Height,
 							Width:    di.Width,
@@ -328,7 +320,6 @@ func (srv *UpnpServer) Init() (err error) {
 			},
 		},
 		" ", "  ")
-	fmt.Println("generated XML", string(srv.rootDescXML))
 	if err != nil {
 		return
 	}
