@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/dms/dlna/dms"
+	"github.com/anacrolix/dms/soap"
 	"github.com/anacrolix/dms/ssdp"
 	"github.com/anacrolix/dms/upnp"
 	"github.com/anacrolix/log"
@@ -32,19 +33,18 @@ import (
 )
 
 const (
-	serverVersion = "1"
-	serviceControlURL           = "/ctl"
+	serverVersion     = "1"
+	serviceControlURL = "/ctl"
 )
 
 // An interface with these flags should be valid for SSDP.
 const ssdpInterfaceFlags = net.FlagUp | net.FlagMulticast
 
 var (
-	
 	serverField = fmt.Sprintf(`Linux/3.4 DLNADOC/1.50 UPnP/1.0 %s/%s`,
 		"Testing-UPnP-Server",
 		serverVersion)
-	deviceIconPath              = "/deviceIcon"
+	deviceIconPath = "/deviceIcon"
 )
 
 // Groups the ServiceWithSCPD definition with its XML description.
@@ -53,41 +53,42 @@ type ServiceWithSCPD struct {
 	SCPD string
 }
 
-
-
 // default config
 var config = &upnpConfig{
-	Path:         "",
-	IfName:       "",
-	Http:         ":1338",
+	Path:   "",
+	IfName: "",
+	Http:   ":1338",
 
-	DeviceIcon:   "",
-	LogHeaders:   false,
+	DeviceIcon: "",
+	LogHeaders: false,
 }
 
 // The input device
-type UpnpDevice struct{
-	ServiceList []*ServiceWithSCPD
-	RootDeviceType string
+type UpnpDevice struct {
+	ServiceList         []*ServiceWithSCPD
+	RootDeviceType      string
 	RootDeviceModelName string
-	RootDeviceUUID string
-	DeviceIcons []dms.Icon
-	FriendlyName string
-	Manufacturer string
+	RootDeviceUUID      string
+	DeviceIcons         []dms.Icon
+	FriendlyName        string
+	Manufacturer        string
 
-	Devices []string
+	Devices  []string
 	Services []string
+
+	UpnpServices map[string]upnp.UPnPService
 }
 
-
 type UpnpServer struct {
-	HTTPConn               net.Listener
-	Interfaces             []net.Interface
-	httpServeMux           *http.ServeMux
-	RootObjectPath         string
-	rootDescXML            []byte
-	closed                 chan struct{}
-	ssdpStopped            chan struct{}
+	HTTPConn       net.Listener
+	Interfaces     []net.Interface
+	httpServeMux   *http.ServeMux
+	RootObjectPath string
+	rootDescXML    []byte
+	closed         chan struct{}
+	ssdpStopped    chan struct{}
+	// The service SOAP handler keyed by service URN.
+	services map[string]upnp.UPnPService
 
 	LogHeaders bool
 	// Stall event subscription requests until they drop. A workaround for
@@ -96,13 +97,13 @@ type UpnpServer struct {
 	// Time interval between SSPD announces
 	NotifyInterval time.Duration
 	// White list of clients
-	AllowedIpNets []*net.IPNet
-	Logger              log.Logger
-	eventingLogger      log.Logger
+	AllowedIpNets  []*net.IPNet
+	Logger         log.Logger
+	eventingLogger log.Logger
 
 	DeviceDesc *upnp.DeviceDesc
 
-	rootDescPath  string
+	rootDescPath string
 
 	UpnpDevice *UpnpDevice
 }
@@ -116,9 +117,8 @@ type upnpConfig struct {
 	StallEventSubscribe bool
 	NotifyInterval      time.Duration
 	AllowedIpNets       []*net.IPNet
-	DeviceIcons		 []dms.Icon
+	DeviceIcons         []dms.Icon
 }
-
 
 func Start(d *UpnpDevice) error {
 	path := flag.String("path", config.Path, "browse root path")
@@ -137,7 +137,6 @@ func Start(d *UpnpDevice) error {
 
 	logger := log.Default.WithNames("main")
 
-
 	config.Path, _ = filepath.Abs(*path)
 	config.IfName = *ifName
 	config.Http = *http
@@ -148,7 +147,7 @@ func Start(d *UpnpDevice) error {
 
 	upnpServer := &UpnpServer{
 		UpnpDevice: d,
-		Logger: logger.WithNames("dms", "server"),
+		Logger:     logger.WithNames("dms", "server"),
 		Interfaces: func(ifName string) (ifs []net.Interface) {
 			var err error
 			if ifName == "" {
@@ -180,12 +179,12 @@ func Start(d *UpnpDevice) error {
 			}
 			return conn
 		}(),
-		RootObjectPath: filepath.Clean(config.Path),
-		LogHeaders: config.LogHeaders,
+		RootObjectPath:      filepath.Clean(config.Path),
+		LogHeaders:          config.LogHeaders,
 		StallEventSubscribe: config.StallEventSubscribe,
 		NotifyInterval:      config.NotifyInterval,
 		AllowedIpNets:       config.AllowedIpNets,
-		rootDescPath: "/rootDesc.xml",
+		rootDescPath:        "/rootDesc.xml",
 	}
 	if err := upnpServer.Init(); err != nil {
 		log.Fatalf("error initing server: %v", err)
@@ -200,7 +199,7 @@ func Start(d *UpnpDevice) error {
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-	
+
 	// Hang and wait until the sigs channel receive a signal
 	<-sigs
 	err := upnpServer.Close()
@@ -216,7 +215,6 @@ func resizeImage(imageData image.Image, size uint) []byte {
 	png.Encode(&buff, img)
 	return buff.Bytes()
 }
-
 
 func readIcon(path string, size uint) []byte {
 	r, err := getIconReader(path)
@@ -239,7 +237,6 @@ func getIconReader(path string) (io.ReadCloser, error) {
 	return os.Open(path)
 }
 
-
 func (s *UpnpServer) InitDevice() {
 	// Init SCPD
 	for _, s := range s.UpnpDevice.ServiceList {
@@ -248,7 +245,6 @@ func (s *UpnpServer) InitDevice() {
 		s.SCPDURL = p + ".xml"
 	}
 
-	
 }
 
 func (srv *UpnpServer) Init() (err error) {
@@ -326,7 +322,6 @@ func (srv *UpnpServer) Init() (err error) {
 	return nil
 }
 
-
 func (srv *UpnpServer) Run() (err error) {
 	go func() {
 		srv.doSSDP()
@@ -391,7 +386,6 @@ func (me *UpnpServer) serveHTTP() error {
 	}
 }
 
-
 func (me *UpnpServer) location(ip net.IP) string {
 	url := url.URL{
 		Scheme: "http",
@@ -410,8 +404,8 @@ func (me *UpnpServer) ssdpInterface(if_ net.Interface) {
 	s := ssdp.Server{
 		Interface: if_,
 		// Devices:   devices(),
-		Devices:   me.UpnpDevice.Devices,
-		Services:  me.UpnpDevice.Services,
+		Devices:  me.UpnpDevice.Devices,
+		Services: me.UpnpDevice.Services,
 		Location: func(ip net.IP) string {
 			return me.location(ip)
 		},
@@ -450,9 +444,6 @@ func (me *UpnpServer) ssdpInterface(if_ net.Interface) {
 	}
 }
 
-
-
-
 func (server *UpnpServer) initMux(mux *http.ServeMux) {
 	// Handle root (presentationURL)
 	// mux.HandleFunc("/", func(resp http.ResponseWriter, req *http.Request) {
@@ -465,11 +456,76 @@ func (server *UpnpServer) initMux(mux *http.ServeMux) {
 	})
 	server.handleSCPDs(mux)
 
-	// TODO:
-	// mux.HandleFunc(serviceControlURL, server.serviceControlHandler)
-	
-	
+	// TODO
+	mux.HandleFunc(serviceControlURL, server.serviceControlHandler)
+
 	// mux.HandleFunc("/debug/pprof/", pprof.Index)
+}
+
+func xmlMarshalOrPanic(value interface{}) []byte {
+	ret, err := xml.MarshalIndent(value, "", "  ")
+	if err != nil {
+		log.Panicf("xmlMarshalOrPanic failed to marshal %v: %s", value, err)
+	}
+	return ret
+}
+
+// Marshal SOAP response arguments into a response XML snippet.
+func marshalSOAPResponse(sa upnp.SoapAction, args [][2]string) []byte {
+	soapArgs := make([]soap.Arg, 0, len(args))
+	for _, arg := range args {
+		argName, value := arg[0], arg[1]
+		soapArgs = append(soapArgs, soap.Arg{
+			XMLName: xml.Name{Local: argName},
+			Value:   value,
+		})
+	}
+	return []byte(fmt.Sprintf(`<u:%[1]sResponse xmlns:u="%[2]s">%[3]s</u:%[1]sResponse>`, sa.Action, sa.ServiceURN.String(), xmlMarshalOrPanic(soapArgs)))
+}
+
+func (server *UpnpServer) serviceControlHandler(w http.ResponseWriter, r *http.Request) {
+	// Handle a service control HTTP request.
+	soapActionString := r.Header.Get("SOAPACTION")
+	soapAction, err := upnp.ParseActionHTTPHeader(soapActionString)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	var env soap.Envelope
+	if err := xml.NewDecoder(r.Body).Decode(&env); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", `text/xml; charset="utf-8"`)
+	w.Header().Set("Ext", "")
+	w.Header().Set("Server", serverField)
+	soapRespXML, code := func() ([]byte, int) {
+		respArgs, err := server.soapActionResponse(soapAction, env.Body.Action, r)
+		if err != nil {
+			upnpErr := upnp.ConvertError(err)
+			return xmlMarshalOrPanic(soap.NewFault("UPnPError", upnpErr)), 500
+		}
+		return marshalSOAPResponse(soapAction, respArgs), 200
+	}()
+	bodyStr := fmt.Sprintf(`<?xml version="1.0" encoding="utf-8" standalone="yes"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>%s</s:Body></s:Envelope>`, soapRespXML)
+	// Compatibility with Samsung Frame TV's - they don't display an empty content directory without this hack:
+	bodyStr = strings.Replace(bodyStr, "&#34;", `"`, -1)
+	w.WriteHeader(code)
+	if _, err := w.Write([]byte(bodyStr)); err != nil {
+		log.Print(err)
+	}
+}
+
+func (server *UpnpServer) soapActionResponse(sa upnp.SoapAction, actionRequestXML []byte, r *http.Request) ([][2]string, error) {
+	service, ok := server.UpnpDevice.UpnpServices[sa.Type]
+	if !ok {
+		return nil, upnp.Errorf(upnp.InvalidActionErrorCode, "Invalid service: %s", sa.Type)
+	}
+
+	// if service.needToNotify {
+	// defer me.notify(service)
+	// }
+	return service.Handle(sa.Action, actionRequestXML, r)
 }
 
 func MakeDeviceUuid(unique string) string {
@@ -482,12 +538,11 @@ func MakeDeviceUuid(unique string) string {
 }
 
 // Install handlers to serve SCPD for each UPnP service.
-func (s *UpnpServer)handleSCPDs(mux *http.ServeMux) {
+func (s *UpnpServer) handleSCPDs(mux *http.ServeMux) {
 
 	// TODO?? what is this used for
 	startTime := time.Now()
 
-	
 	for _, s := range s.UpnpDevice.ServiceList {
 		mux.HandleFunc(s.SCPDURL, func(serviceDesc string) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) {
@@ -497,7 +552,6 @@ func (s *UpnpServer)handleSCPDs(mux *http.ServeMux) {
 		}(s.SCPD))
 	}
 }
-
 
 func makeIpNets(s string) []*net.IPNet {
 	var nets []*net.IPNet
