@@ -127,7 +127,7 @@ func Start(d *UpnpDevice) error {
 	logHeaders := flag.Bool("logHeaders", config.LogHeaders, "log HTTP headers")
 	allowedIps := flag.String("allowedIps", "", "allowed ip of clients, separated by comma")
 	flag.BoolVar(&config.StallEventSubscribe, "stallEventSubscribe", false, "workaround for some bad event subscribers")
-	flag.DurationVar(&config.NotifyInterval, "notifyInterval", 10*time.Second, "interval between SSPD announces")
+	flag.DurationVar(&config.NotifyInterval, "notifyInterval", 180*time.Second, "interval between SSPD announces")
 
 	flag.Parse()
 	if flag.NArg() != 0 {
