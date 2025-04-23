@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,8 +17,8 @@ var serviceURNRegexp *regexp.Regexp = regexp.MustCompile(`^urn:(.*):service:(\w+
 // UPnP SOAP service.
 type UPnPService interface {
 	Handle(action string, argsXML []byte, r *http.Request) (respArgs [][2]string, err error)
-	Subscribe(callback []*url.URL, timeoutSeconds int) (sid string, actualTimeout int, err error)
-	Unsubscribe(sid string) error
+	Subscribe(w http.ResponseWriter, r *http.Request) (err error)
+	Unsubscribe(w http.ResponseWriter, r *http.Request) (err error)
 }
 
 type ServiceURN struct {
@@ -104,7 +103,7 @@ type Device struct {
 }
 
 type DeviceDesc struct {
-	XMLName     xml.Name    `xml:"urn:schemas-upnp-org:device-1-0 root"`
+	XMLName xml.Name `xml:"urn:schemas-upnp-org:device-1-0 root"`
 	// NSDLNA      string      `xml:"xmlns:dlna,attr"`
 	// NSSEC       string      `xml:"xmlns:sec,attr"`
 	SpecVersion SpecVersion `xml:"specVersion"`

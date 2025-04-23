@@ -456,10 +456,37 @@ func (server *UpnpServer) initMux(mux *http.ServeMux) {
 	})
 	server.handleSCPDs(mux)
 
-	// TODO
+	// Control
 	mux.HandleFunc(serviceControlURL, server.serviceControlHandler)
 
+	// Eventing
+	for _, s := range server.UpnpDevice.ServiceList {
+		serviceKey := getServiceKey(s.Service.ServiceType)
+
+		mux.HandleFunc(s.Service.EventSubURL, func(service upnp.UPnPService) http.HandlerFunc {
+			fmt.Println("service", service)
+			return func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "SUBSCRIBE" {
+					service.Subscribe(w, r)
+				} else if r.Method == "UNSUBSCRIBE" {
+					service.Unsubscribe(w, r)
+				} else {
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			}
+		}(server.UpnpDevice.UpnpServices[serviceKey]))
+	}
 	// mux.HandleFunc("/debug/pprof/", pprof.Index)
+}
+
+// Input: urn:schemas-upnp-org:service:SwitchPower:1
+// Output: SwitchPower
+func getServiceKey(serviceUrn string) string {
+	parts := strings.Split(serviceUrn, ":")
+	if len(parts) < 4 {
+		panic("Invalid service URN")
+	}
+	return strings.Split(serviceUrn, ":")[3]
 }
 
 func xmlMarshalOrPanic(value interface{}) []byte {
